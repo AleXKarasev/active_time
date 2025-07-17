@@ -35,11 +35,11 @@ Creates `activity_log.xlsx` with:
 
 ## Features
 
-✅ Tracks lock/unlock events to calculate active sessions  
-✅ Minimum 5-minute session filtering  
-✅ Alternating row colors for readability  
-✅ Command line argument support  
-✅ Professional Excel formatting  
+✅ Tracks lock/unlock events to calculate active sessions
+✅ Minimum 5-minute session filtering
+✅ Alternating row colors for readability
+✅ Command line argument support
+✅ Professional Excel formatting
 
 ## Usage Examples
 
