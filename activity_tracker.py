@@ -297,12 +297,6 @@ class ActivityTracker:
             cell.alignment = Alignment(horizontal='center', vertical='center')
             cell.border = self.THIN_BORDER
 
-    def _clear_column_data(self, ws, start_col_index: int) -> None:
-        """Clear existing data in the 3 columns for a date."""
-        for row in range(3, ws.max_row + 1):
-            for col_offset in range(3):
-                ws.cell(row=row, column=start_col_index + col_offset, value="")
-
     def _add_session_data(self, ws, start_col_index: int, sessions: List[Dict]) -> None:
         """Add session data to Excel columns with proper formatting and styling."""
         for i, session in enumerate(sessions, start=3):
@@ -441,8 +435,6 @@ class ActivityTracker:
             else:
                 print(f"  Updating {date_str} starting at column {start_col_index}")
 
-            # Clear and populate data
-            self._clear_column_data(ws, start_col_index)
             self._add_session_data(ws, start_col_index, data['sessions'])
             self._add_total_formula(ws, start_col_index, data['total_sessions'])
 
