@@ -332,6 +332,43 @@ class ActivityTracker:
             duration_cell.fill = PatternFill(start_color=row_color, end_color=row_color, fill_type="solid")
             duration_cell.border = self.THIN_BORDER
 
+    def _add_new_session_data(self, ws, start_col_index: int, new_sessions: List[Dict], existing_count: int) -> None:
+        """Add only new session data to Excel columns, preserving existing sessions."""
+        for i, session in enumerate(new_sessions):
+            row_num = 3 + existing_count + i  # Start after existing sessions
+
+            # Convert to time values for Excel
+            start_time = session['start'].time()
+            end_time = session['end'].time()
+
+            # Determine row color (alternating pattern)
+            row_color = self.ALTERNATE_COLOR if (row_num - 3) % 2 == 1 else "FFFFFF"
+
+            # Start time column
+            start_cell = ws.cell(row=row_num, column=start_col_index, value=start_time)
+            start_cell.number_format = 'HH:MM'
+            start_cell.alignment = Alignment(horizontal='center', vertical='center')
+            start_cell.fill = PatternFill(start_color=row_color, end_color=row_color, fill_type="solid")
+            start_cell.border = self.THIN_BORDER
+
+            # End time column
+            end_cell = ws.cell(row=row_num, column=start_col_index + 1, value=end_time)
+            end_cell.number_format = 'HH:MM'
+            end_cell.alignment = Alignment(horizontal='center', vertical='center')
+            end_cell.fill = PatternFill(start_color=row_color, end_color=row_color, fill_type="solid")
+            end_cell.border = self.THIN_BORDER
+
+            # Duration formula (End - Start)
+            start_col_letter = utils.get_column_letter(start_col_index)
+            end_col_letter = utils.get_column_letter(start_col_index + 1)
+            duration_formula = f'={end_col_letter}{row_num}-{start_col_letter}{row_num}'
+
+            duration_cell = ws.cell(row=row_num, column=start_col_index + 2, value=duration_formula)
+            duration_cell.number_format = '[H]:MM'
+            duration_cell.alignment = Alignment(horizontal='center', vertical='center')
+            duration_cell.fill = PatternFill(start_color=row_color, end_color=row_color, fill_type="solid")
+            duration_cell.border = self.THIN_BORDER
+
     def _add_total_formula(self, ws, start_col_index: int, session_count: int) -> None:
         """Add total duration formula to the Duration column with enhanced styling."""
         if session_count == 0:
@@ -409,21 +446,21 @@ class ActivityTracker:
 
             # Find existing columns for this date
             start_col_index = None
-            should_update = True
+            existing_sessions = 0
 
             for col in range(2, 101, 3):
                 if ws.cell(row=1, column=col).value == date_str:
                     start_col_index = col
-                    # Check if session count has changed
+                    # Count existing sessions in Excel
                     existing_sessions = sum(1 for row in range(3, ws.max_row + 1)
                                           if ws.cell(row=row, column=col).value)
-                    should_update = existing_sessions != data['total_sessions']
                     break
                 elif not ws.cell(row=1, column=col).value:
                     break
 
-            if not should_update:
-                print(f"  Skipping {date_str} - no changes needed")
+            # Only process if we have more sessions in log than in Excel
+            if start_col_index is not None and existing_sessions >= data['total_sessions']:
+                print(f"  Skipping {date_str} - Excel has {existing_sessions} sessions, log has {data['total_sessions']}")
                 continue
 
             # Add new columns if date doesn't exist
@@ -432,10 +469,13 @@ class ActivityTracker:
                 print(f"  Creating new columns {start_col_index}-{start_col_index+2} for {date_str}")
                 self._setup_excel_headers(ws, start_col_index, date_str)
                 max_visible_col = start_col_index + 2
+                existing_sessions = 0
             else:
-                print(f"  Updating {date_str} starting at column {start_col_index}")
+                print(f"  Adding {data['total_sessions'] - existing_sessions} new sessions to {date_str}")
 
-            self._add_session_data(ws, start_col_index, data['sessions'])
+            # Only add new sessions that don't exist in Excel
+            new_sessions = data['sessions'][existing_sessions:]
+            self._add_new_session_data(ws, start_col_index, new_sessions, existing_sessions)
             self._add_total_formula(ws, start_col_index, data['total_sessions'])
 
         # Update row labels
