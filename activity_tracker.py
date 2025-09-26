@@ -271,141 +271,143 @@ class ActivityTracker:
         minutes = (total_seconds % 3600) // 60
         return f"{hours}h {minutes}m"
 
-    def _setup_excel_headers(self, ws, start_col_index: int, date_str: str) -> None:
-        """Set up Excel headers for a new date column group with enhanced styling."""
-        # Set up headers for the 3 columns
-        ws.cell(row=1, column=start_col_index, value=date_str)
-        ws.cell(row=1, column=start_col_index + 1, value="")  # Empty middle header
-        ws.cell(row=1, column=start_col_index + 2, value="")  # Empty end header
+    def _setup_excel_headers(self, ws) -> None:
+        """Set up Excel headers for vertical layout with enhanced styling."""
+        headers = ["Date", "Session", "Start Time", "End Time", "Duration"]
 
-        # Style the main date header
-        date_cell = ws.cell(row=1, column=start_col_index)
-        date_cell.font = Font(bold=True, color="FFFFFF", size=12)
-        date_cell.fill = PatternFill(start_color=self.HEADER_COLOR, end_color=self.HEADER_COLOR, fill_type="solid")
-        date_cell.alignment = Alignment(horizontal='center', vertical='center')
-        date_cell.border = self.THICK_BORDER
-
-        # Merge the 3 header cells for the date
-        ws.merge_cells(start_row=1, start_column=start_col_index, end_row=1, end_column=start_col_index + 2)
-
-        # Add sub-headers with enhanced styling
-        sub_headers = ["Start", "End", "Duration"]
-        for i, header in enumerate(sub_headers):
-            cell = ws.cell(row=2, column=start_col_index + i, value=header)
-            cell.font = Font(bold=True, color="000000", size=10)
-            cell.fill = PatternFill(start_color=self.SUBHEADER_COLOR, end_color=self.SUBHEADER_COLOR, fill_type="solid")
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.font = Font(bold=True, color="FFFFFF", size=12)
+            cell.fill = PatternFill(start_color=self.HEADER_COLOR, end_color=self.HEADER_COLOR, fill_type="solid")
             cell.alignment = Alignment(horizontal='center', vertical='center')
-            cell.border = self.THIN_BORDER
+            cell.border = self.THICK_BORDER
 
-    def _add_session_data(self, ws, start_col_index: int, sessions: List[Dict]) -> None:
-        """Add session data to Excel columns with proper formatting and styling."""
-        for i, session in enumerate(sessions, start=3):
+    def _add_session_rows(self, ws, date_str: str, sessions: List[Dict], start_row: int) -> int:
+        """Add session data as rows with proper formatting and styling."""
+        current_row = start_row
+
+        for i, session in enumerate(sessions):
             # Convert to time values for Excel
             start_time = session['start'].time()
             end_time = session['end'].time()
 
             # Determine row color (alternating pattern)
-            row_color = self.ALTERNATE_COLOR if (i - 3) % 2 == 1 else "FFFFFF"
+            row_color = self.ALTERNATE_COLOR if i % 2 == 1 else "FFFFFF"
+
+            # Date column (only for first session of the day, merge for others)
+            if i == 0:
+                date_cell = ws.cell(row=current_row, column=1, value=date_str)
+                date_cell.font = Font(bold=True, size=10)
+                date_cell.fill = PatternFill(start_color=self.SESSION_COLOR, end_color=self.SESSION_COLOR, fill_type="solid")
+                date_cell.alignment = Alignment(horizontal='center', vertical='center')
+                date_cell.border = self.THIN_BORDER
+
+                # Merge date cells if multiple sessions
+                if len(sessions) > 1:
+                    ws.merge_cells(start_row=current_row, start_column=1,
+                                 end_row=current_row + len(sessions) - 1, end_column=1)
+
+            # Session number column
+            session_cell = ws.cell(row=current_row, column=2, value=f"Session {i+1}")
+            session_cell.font = Font(size=9)
+            session_cell.fill = PatternFill(start_color=row_color, end_color=row_color, fill_type="solid")
+            session_cell.alignment = Alignment(horizontal='center', vertical='center')
+            session_cell.border = self.THIN_BORDER
 
             # Start time column
-            start_cell = ws.cell(row=i, column=start_col_index, value=start_time)
+            start_cell = ws.cell(row=current_row, column=3, value=start_time)
             start_cell.number_format = 'HH:MM'
             start_cell.alignment = Alignment(horizontal='center', vertical='center')
             start_cell.fill = PatternFill(start_color=row_color, end_color=row_color, fill_type="solid")
             start_cell.border = self.THIN_BORDER
 
             # End time column
-            end_cell = ws.cell(row=i, column=start_col_index + 1, value=end_time)
+            end_cell = ws.cell(row=current_row, column=4, value=end_time)
             end_cell.number_format = 'HH:MM'
             end_cell.alignment = Alignment(horizontal='center', vertical='center')
             end_cell.fill = PatternFill(start_color=row_color, end_color=row_color, fill_type="solid")
             end_cell.border = self.THIN_BORDER
 
             # Duration formula (End - Start)
-            start_col_letter = utils.get_column_letter(start_col_index)
-            end_col_letter = utils.get_column_letter(start_col_index + 1)
-            duration_formula = f'={end_col_letter}{i}-{start_col_letter}{i}'
-
-            duration_cell = ws.cell(row=i, column=start_col_index + 2, value=duration_formula)
+            duration_formula = f'=D{current_row}-C{current_row}'
+            duration_cell = ws.cell(row=current_row, column=5, value=duration_formula)
             duration_cell.number_format = '[H]:MM'
             duration_cell.alignment = Alignment(horizontal='center', vertical='center')
             duration_cell.fill = PatternFill(start_color=row_color, end_color=row_color, fill_type="solid")
             duration_cell.border = self.THIN_BORDER
 
-    def _add_new_session_data(self, ws, start_col_index: int, new_sessions: List[Dict], existing_count: int) -> None:
-        """Add only new session data to Excel columns, preserving existing sessions."""
-        for i, session in enumerate(new_sessions):
-            row_num = 3 + existing_count + i  # Start after existing sessions
+            current_row += 1
 
-            # Convert to time values for Excel
-            start_time = session['start'].time()
-            end_time = session['end'].time()
-
-            # Determine row color (alternating pattern)
-            row_color = self.ALTERNATE_COLOR if (row_num - 3) % 2 == 1 else "FFFFFF"
-
-            # Start time column
-            start_cell = ws.cell(row=row_num, column=start_col_index, value=start_time)
-            start_cell.number_format = 'HH:MM'
-            start_cell.alignment = Alignment(horizontal='center', vertical='center')
-            start_cell.fill = PatternFill(start_color=row_color, end_color=row_color, fill_type="solid")
-            start_cell.border = self.THIN_BORDER
-
-            # End time column
-            end_cell = ws.cell(row=row_num, column=start_col_index + 1, value=end_time)
-            end_cell.number_format = 'HH:MM'
-            end_cell.alignment = Alignment(horizontal='center', vertical='center')
-            end_cell.fill = PatternFill(start_color=row_color, end_color=row_color, fill_type="solid")
-            end_cell.border = self.THIN_BORDER
-
-            # Duration formula (End - Start)
-            start_col_letter = utils.get_column_letter(start_col_index)
-            end_col_letter = utils.get_column_letter(start_col_index + 1)
-            duration_formula = f'={end_col_letter}{row_num}-{start_col_letter}{row_num}'
-
-            duration_cell = ws.cell(row=row_num, column=start_col_index + 2, value=duration_formula)
-            duration_cell.number_format = '[H]:MM'
-            duration_cell.alignment = Alignment(horizontal='center', vertical='center')
-            duration_cell.fill = PatternFill(start_color=row_color, end_color=row_color, fill_type="solid")
-            duration_cell.border = self.THIN_BORDER
-
-    def _add_total_formula(self, ws, start_col_index: int, session_count: int) -> None:
-        """Add total duration formula to the Duration column with enhanced styling."""
-        if session_count == 0:
-            return
-
-        start_row = 3
-        end_row = 2 + session_count
-        duration_col_letter = utils.get_column_letter(start_col_index + 2)
-
-        # SUM formula for duration column
-        total_formula = f'=SUM({duration_col_letter}{start_row}:{duration_col_letter}{end_row})'
-
-        # Place total in the Duration column, row 2
-        total_cell = ws.cell(row=2, column=start_col_index + 2, value=total_formula)
-        total_cell.number_format = '[H]:MM'
-        total_cell.font = Font(bold=True, color="000000", size=10)
+        # Add daily total row
+        total_cell = ws.cell(row=current_row, column=2, value="Daily Total")
+        total_cell.font = Font(bold=True, size=10)
         total_cell.fill = PatternFill(start_color=self.TOTAL_COLOR, end_color=self.TOTAL_COLOR, fill_type="solid")
         total_cell.alignment = Alignment(horizontal='center', vertical='center')
         total_cell.border = self.THIN_BORDER
 
-    def _set_column_widths(self, ws, max_visible_col: int) -> None:
-        """Set appropriate column widths for time data."""
-        for col_num in range(1, max_visible_col + 1):
-            column_letter = utils.get_column_letter(col_num)
+        # Empty cells for start/end columns in total row
+        for col in [3, 4]:
+            empty_cell = ws.cell(row=current_row, column=col, value="")
+            empty_cell.fill = PatternFill(start_color=self.TOTAL_COLOR, end_color=self.TOTAL_COLOR, fill_type="solid")
+            empty_cell.border = self.THIN_BORDER
 
-            if col_num == 1:  # Session column
-                ws.column_dimensions[column_letter].width = 14
-            elif (col_num - 2) % 3 == 0:  # Start time columns
-                ws.column_dimensions[column_letter].width = 10
-            elif (col_num - 2) % 3 == 1:  # End time columns
-                ws.column_dimensions[column_letter].width = 10
-            elif (col_num - 2) % 3 == 2:  # Duration columns
-                ws.column_dimensions[column_letter].width = 12
+        # Total duration formula
+        if len(sessions) > 0:
+            start_formula_row = start_row
+            end_formula_row = current_row - 1
+            total_formula = f'=SUM(E{start_formula_row}:E{end_formula_row})'
+
+            total_duration_cell = ws.cell(row=current_row, column=5, value=total_formula)
+            total_duration_cell.number_format = '[H]:MM'
+            total_duration_cell.font = Font(bold=True)
+            total_duration_cell.fill = PatternFill(start_color=self.TOTAL_COLOR, end_color=self.TOTAL_COLOR, fill_type="solid")
+            total_duration_cell.alignment = Alignment(horizontal='center', vertical='center')
+            total_duration_cell.border = self.THIN_BORDER
+
+        return current_row + 2  # Return next available row (with spacing)
+
+    def _find_date_in_excel(self, ws, date_str: str) -> tuple:
+        """Find if a date already exists in Excel. Returns (exists, last_row_for_date)."""
+        for row in range(2, ws.max_row + 1):
+            cell_value = ws.cell(row=row, column=1).value
+            if cell_value == date_str:
+                # Found the date, now find the last row for this date
+                last_row = row
+                for check_row in range(row + 1, ws.max_row + 1):
+                    next_cell = ws.cell(row=check_row, column=1).value
+                    if next_cell and next_cell != date_str:
+                        break
+                    if ws.cell(row=check_row, column=2).value:  # If there's session data
+                        last_row = check_row
+                return True, last_row
+        return False, 0
+
+    def _count_existing_sessions(self, ws, date_str: str) -> int:
+        """Count existing sessions for a specific date in Excel."""
+        count = 0
+        for row in range(2, ws.max_row + 1):
+            if ws.cell(row=row, column=1).value == date_str:
+                session_value = ws.cell(row=row, column=2).value
+                if session_value and isinstance(session_value, str) and session_value.startswith("Session"):
+                    count += 1
+        return count
+
+    def _set_column_widths(self, ws) -> None:
+        """Set appropriate column widths for vertical layout."""
+        column_widths = {
+            'A': 12,  # Date column
+            'B': 14,  # Session column
+            'C': 12,  # Start time column
+            'D': 12,  # End time column
+            'E': 12   # Duration column
+        }
+
+        for col_letter, width in column_widths.items():
+            ws.column_dimensions[col_letter].width = width
 
     def create_or_update_excel(self, activity_data: Dict[str, Dict[str, Any]]) -> None:
         """
-        Create or update Excel file with activity data.
+        Create or update Excel file with activity data in vertical layout.
 
         Args:
             activity_data: Dictionary mapping dates to session data
@@ -419,119 +421,154 @@ class ActivityTracker:
             ws = wb.active
             ws.title = "Activity Log"
 
-            # Create initial headers
-            ws['A1'] = "Session"
-            session_cell = ws['A1']
-            session_cell.font = Font(bold=True, color="FFFFFF", size=12)
-            session_cell.fill = PatternFill(start_color=self.HEADER_COLOR, end_color=self.HEADER_COLOR, fill_type="solid")
-            session_cell.alignment = Alignment(horizontal='center', vertical='center')
-            session_cell.border = self.THICK_BORDER
-
-        # Find existing date columns and max column
-        max_visible_col = 1
-        for col in range(2, 101, 3):  # Check every 3rd column
-            cell_value = ws.cell(row=1, column=col).value
-            if cell_value and isinstance(cell_value, str):
-                try:
-                    datetime.strptime(cell_value, '%Y-%m-%d')
-                    max_visible_col = max(max_visible_col, col + 2)
-                except ValueError:
-                    pass
-            elif not cell_value:
-                break
+            # Create headers for new workbook
+            self._setup_excel_headers(ws)
 
         # Process each date in activity data
         for date_str, data in sorted(activity_data.items()):
             print(f"Processing date: {date_str} with {data['total_sessions']} sessions")
 
-            # Find existing columns for this date
-            start_col_index = None
-            existing_sessions = 0
-
-            for col in range(2, 101, 3):
-                if ws.cell(row=1, column=col).value == date_str:
-                    start_col_index = col
-                    # Count existing sessions in Excel
-                    existing_sessions = sum(1 for row in range(3, ws.max_row + 1)
-                                          if ws.cell(row=row, column=col).value)
-                    break
-                elif not ws.cell(row=1, column=col).value:
-                    break
+            # Check if date already exists and count existing sessions
+            date_exists, last_row = self._find_date_in_excel(ws, date_str)
+            existing_sessions = self._count_existing_sessions(ws, date_str) if date_exists else 0
 
             # Only process if we have more sessions in log than in Excel
-            if start_col_index is not None and existing_sessions >= data['total_sessions']:
+            if existing_sessions >= data['total_sessions']:
                 print(f"  Skipping {date_str} - Excel has {existing_sessions} sessions, log has {data['total_sessions']}")
                 continue
 
-            # Add new columns if date doesn't exist
-            if start_col_index is None:
-                start_col_index = max_visible_col + 1
-                print(f"  Creating new columns {start_col_index}-{start_col_index+2} for {date_str}")
-                self._setup_excel_headers(ws, start_col_index, date_str)
-                max_visible_col = start_col_index + 2
-                existing_sessions = 0
-            else:
+            if date_exists:
                 print(f"  Adding {data['total_sessions'] - existing_sessions} new sessions to {date_str}")
+                # Add only new sessions
+                new_sessions = data['sessions'][existing_sessions:]
+                # Find next available row (skip total row if it exists)
+                next_row = last_row + 2 if ws.cell(row=last_row + 1, column=2).value == "Daily Total" else last_row + 1
+                self._add_new_session_rows(ws, date_str, new_sessions, next_row, existing_sessions)
+            else:
+                print(f"  Creating new entry for {date_str}")
+                # Find next available row
+                next_row = ws.max_row + 1 if ws.max_row > 1 else 2
+                self._add_session_rows(ws, date_str, data['sessions'], next_row)
 
-            # Only add new sessions that don't exist in Excel
-            new_sessions = data['sessions'][existing_sessions:]
-            self._add_new_session_data(ws, start_col_index, new_sessions, existing_sessions)
-            self._add_total_formula(ws, start_col_index, data['total_sessions'])
-
-        # Update row labels
-        self._update_row_labels(ws, max_visible_col)
+        # Apply final formatting
+        self._apply_final_formatting(ws)
 
         # Set column widths
-        self._set_column_widths(ws, max_visible_col)
-
-        # Add final touches to the worksheet
-        self._apply_final_formatting(ws, max_visible_col)
+        self._set_column_widths(ws)
 
         # Save the workbook
         wb.save(self.excel_file)
         print(f"Excel file updated: {self.excel_file}")
 
-    def _apply_final_formatting(self, ws, max_visible_col: int) -> None:
-        """Apply final formatting touches to the worksheet."""
-        # Freeze panes to keep headers and first column visible during scrolling
-        # This freezes the first column (A) and first two rows (1-2)
-        ws.freeze_panes = 'B3'
+    def _add_new_session_rows(self, ws, date_str: str, new_sessions: List[Dict], start_row: int, existing_count: int) -> None:
+        """Add only new session rows for an existing date."""
+        current_row = start_row
 
-        # Set row heights for better appearance
-        ws.row_dimensions[1].height = 25  # Header row
-        ws.row_dimensions[2].height = 20  # Subheader row
+        for i, session in enumerate(new_sessions):
+            session_number = existing_count + i + 1  # Continue numbering from existing sessions
 
-        # Set default row height for data rows
-        for row_num in range(3, ws.max_row + 1):
-            ws.row_dimensions[row_num].height = 18
+            # Convert to time values for Excel
+            start_time = session['start'].time()
+            end_time = session['end'].time()
 
-    def _update_row_labels(self, ws, max_visible_col: int) -> None:
-        """Update session row labels with enhanced styling."""
-        if ws.max_row >= 2:
-            total_cell = ws.cell(row=2, column=1, value="Total")
-            total_cell.font = Font(bold=True, color="000000", size=10)
+            # Determine row color (alternating pattern based on total session count)
+            row_color = self.ALTERNATE_COLOR if (session_number - 1) % 2 == 1 else "FFFFFF"
+
+            # Session number column
+            session_cell = ws.cell(row=current_row, column=2, value=f"Session {session_number}")
+            session_cell.font = Font(size=9)
+            session_cell.fill = PatternFill(start_color=row_color, end_color=row_color, fill_type="solid")
+            session_cell.alignment = Alignment(horizontal='center', vertical='center')
+            session_cell.border = self.THIN_BORDER
+
+            # Start time column
+            start_cell = ws.cell(row=current_row, column=3, value=start_time)
+            start_cell.number_format = 'HH:MM'
+            start_cell.alignment = Alignment(horizontal='center', vertical='center')
+            start_cell.fill = PatternFill(start_color=row_color, end_color=row_color, fill_type="solid")
+            start_cell.border = self.THIN_BORDER
+
+            # End time column
+            end_cell = ws.cell(row=current_row, column=4, value=end_time)
+            end_cell.number_format = 'HH:MM'
+            end_cell.alignment = Alignment(horizontal='center', vertical='center')
+            end_cell.fill = PatternFill(start_color=row_color, end_color=row_color, fill_type="solid")
+            end_cell.border = self.THIN_BORDER
+
+            # Duration formula (End - Start)
+            duration_formula = f'=D{current_row}-C{current_row}'
+            duration_cell = ws.cell(row=current_row, column=5, value=duration_formula)
+            duration_cell.number_format = '[H]:MM'
+            duration_cell.alignment = Alignment(horizontal='center', vertical='center')
+            duration_cell.fill = PatternFill(start_color=row_color, end_color=row_color, fill_type="solid")
+            duration_cell.border = self.THIN_BORDER
+
+            current_row += 1
+
+        # Update daily total formula to include new sessions
+        self._update_daily_total(ws, date_str)
+
+    def _update_daily_total(self, ws, date_str: str) -> None:
+        """Update the daily total formula for a specific date."""
+        # Find all session rows for this date
+        session_rows = []
+        for row in range(2, ws.max_row + 1):
+            if ws.cell(row=row, column=1).value == date_str:
+                session_value = ws.cell(row=row, column=2).value
+                if session_value and isinstance(session_value, str) and session_value.startswith("Session"):
+                    session_rows.append(row)
+
+        if not session_rows:
+            return
+
+        # Find or create the total row
+        total_row = None
+        for row in range(min(session_rows), ws.max_row + 1):
+            if ws.cell(row=row, column=2).value == "Daily Total":
+                total_row = row
+                break
+
+        if not total_row:
+            # Create new total row after last session
+            total_row = max(session_rows) + 1
+
+            # Add daily total row
+            total_cell = ws.cell(row=total_row, column=2, value="Daily Total")
+            total_cell.font = Font(bold=True, size=10)
             total_cell.fill = PatternFill(start_color=self.TOTAL_COLOR, end_color=self.TOTAL_COLOR, fill_type="solid")
             total_cell.alignment = Alignment(horizontal='center', vertical='center')
             total_cell.border = self.THIN_BORDER
 
-        # Find maximum number of sessions across all days
-        max_sessions = 0
-        for col in range(2, max_visible_col + 1, 3):
-            session_count = sum(1 for row in range(3, ws.max_row + 1)
-                              if ws.cell(row=row, column=col).value)
-            max_sessions = max(max_sessions, session_count)
+            # Empty cells for start/end columns in total row
+            for col in [3, 4]:
+                empty_cell = ws.cell(row=total_row, column=col, value="")
+                empty_cell.fill = PatternFill(start_color=self.TOTAL_COLOR, end_color=self.TOTAL_COLOR, fill_type="solid")
+                empty_cell.border = self.THIN_BORDER
 
-        # Update session labels with styling
-        for i in range(max_sessions):
-            row_num = 3 + i
-            current_label = ws.cell(row=row_num, column=1).value
-            expected_label = f"Session {i+1}"
-            if current_label != expected_label:
-                session_cell = ws.cell(row=row_num, column=1, value=expected_label)
-                session_cell.font = Font(bold=False, size=9)
-                session_cell.fill = PatternFill(start_color=self.SESSION_COLOR, end_color=self.SESSION_COLOR, fill_type="solid")
-                session_cell.alignment = Alignment(horizontal='center', vertical='center')
-                session_cell.border = self.THIN_BORDER
+        # Update total duration formula
+        if session_rows:
+            start_formula_row = min(session_rows)
+            end_formula_row = max(session_rows)
+            total_formula = f'=SUM(E{start_formula_row}:E{end_formula_row})'
+
+            total_duration_cell = ws.cell(row=total_row, column=5, value=total_formula)
+            total_duration_cell.number_format = '[H]:MM'
+            total_duration_cell.font = Font(bold=True)
+            total_duration_cell.fill = PatternFill(start_color=self.TOTAL_COLOR, end_color=self.TOTAL_COLOR, fill_type="solid")
+            total_duration_cell.alignment = Alignment(horizontal='center', vertical='center')
+            total_duration_cell.border = self.THIN_BORDER
+
+    def _apply_final_formatting(self, ws) -> None:
+        """Apply final formatting touches to the worksheet."""
+        # Freeze panes to keep headers visible during scrolling
+        ws.freeze_panes = 'A2'
+
+        # Set row heights for better appearance
+        ws.row_dimensions[1].height = 25  # Header row
+
+        # Set default row height for data rows
+        for row_num in range(2, ws.max_row + 1):
+            ws.row_dimensions[row_num].height = 18
 
     def _print_event_distribution(self, user_events: List[Dict[str, Any]]) -> None:
         """Print distribution of events by type for debugging."""
